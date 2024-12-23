@@ -3,6 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "../styles/globals.css";
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import { OpenPanelProvider } from "@/lib/analytics/openpanel/OpenPanelProvider";
+import { GoogleAnalyticsProvider } from "@/lib/analytics/google/GoogleAnalyticsProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,6 +31,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning
       >
+        <GoogleAnalyticsProvider />
+        <OpenPanelProvider />
         <Header />
         {children}
         <Footer />
