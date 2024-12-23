@@ -77,13 +77,3 @@ body {
     @apply border-[hsl(var(--border))];
   }
 }
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
-}
-
