@@ -42,7 +42,7 @@ export function PaymentForm({ onSuccess }: PaymentFormProps) {
       
       // Save to Supabase
       const { error } = await supabase
-        .from('payment_notifications')
+        .from('1kby2025_payments')
         .insert([values]);
 
       if (error) throw error;
