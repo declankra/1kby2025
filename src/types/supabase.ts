@@ -11,7 +11,7 @@ export interface PaymentNotification {
   /*
   create table public.payment_notifications (
     id uuid default uuid_generate_v4() primary key,
-    created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+    created_at timestamp with time zone default timezone('cst'::text, now()) not null,
     name text not null,
     message text not null,
     amount numeric(10,2) not null
