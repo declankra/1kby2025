@@ -9,6 +9,12 @@ import { supabase } from '@/lib/supabase';
 import { DollarSign } from 'lucide-react';
 
 function NotificationItem({ notification }: { notification: PaymentNotification }) {
+  const [formattedDate, setFormattedDate] = useState<string>('');
+
+  useEffect(() => {
+    setFormattedDate(new Date(notification.created_at).toLocaleString());
+  }, [notification.created_at]);
+
   return (
     <div className="flex items-center space-x-4 rounded-lg border p-4">
       <div className="rounded-full bg-green-100 p-2 dark:bg-green-900">
@@ -18,7 +24,7 @@ function NotificationItem({ notification }: { notification: PaymentNotification 
         <p className="text-sm font-medium">{notification.name}</p>
         <p className="text-sm text-muted-foreground">{notification.message}</p>
         <p className="text-xs text-muted-foreground">
-          ${notification.amount.toFixed(2)} • {new Date(notification.created_at).toLocaleString()}
+          ${notification.amount.toFixed(2)} • {formattedDate}
         </p>
       </div>
     </div>
