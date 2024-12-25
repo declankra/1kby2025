@@ -57,13 +57,13 @@ export function NotificationList() {
 
     // Subscribe to real-time updates
     const subscription = supabase
-      .channel('payment_notifications')
+      .channel('1kby2025_payments')
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
-          table: 'payment_notifications',
+          table: '1kby2025_payments',
         },
         (payload) => {
           const newNotification = payload.new as PaymentNotification;
