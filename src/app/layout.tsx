@@ -3,8 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "@/app/globals.css";
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { OpenPanelProvider } from "@/lib/analytics/openpanel/OpenPanelProvider";
-import { GoogleAnalyticsProvider } from "@/lib/analytics/google/GoogleAnalyticsProvider";
+import { Providers } from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -18,7 +17,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "1000by2025 | dkBuilds 2025 Goal",
-  description: "dkBuilds 2025 goal: Generate $1000 in value by 2025",
+  description: "dkBuilds 2025 goal: Create $1000 in value by 2025",
 };
 
 export default function RootLayout({
@@ -28,14 +27,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <GoogleAnalyticsProvider />
-        <OpenPanelProvider />
-        <Header />
-        {children}
-        <Footer />
+      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+        <Providers>
+          <Header />
+          <main>{children}</main>
+          <Footer />
+        </Providers>
       </body>
     </html>
   );
