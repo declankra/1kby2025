@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 
 // Create Stripe instance with latest API version
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "", {
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY_TEST || "", {
   apiVersion: "2024-12-18.acacia",
 })
 
