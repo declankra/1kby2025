@@ -12,7 +12,7 @@ export default function About() {
             </p>
             <p className="text-lg">
               <span className="underline decoration-wavy decoration-green-500">Willingness to pay is the strongest indicator of solving real problems</span>.
-              Following last year's success—where we focused on reaching 1,000 users and proved people want to use our products—this goal sets the stage for even bigger achievements.
+              Following last year&apos;s success—where we focused on reaching 1,000 users and proved people want to use our products—this goal sets the stage for even bigger achievements.
             </p>
             <p className="text-lg">
               This page serves as (1) a public tracker towards our goal and (2) a POC for accepting payments through web applications 
