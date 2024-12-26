@@ -54,6 +54,7 @@ interface PaymentFormProps {
 // Inner Payment Form Component that uses Stripe hooks
 function CheckoutForm({ onSuccess }: PaymentFormProps) {
   const [loading, setLoading] = useState(false);
+  const [showPaymentElement, setShowPaymentElement] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const stripe = useStripe();
   const elements = useElements();
@@ -64,6 +65,15 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
       amount: 1,
     },
   });
+
+  const handleInitialSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // Validate form before showing payment element
+    const isValid = await form.trigger();
+    if (isValid) {
+      setShowPaymentElement(true);
+    }
+  };
 
   const onSubmit = async (values: FormData) => {
     if (!stripe || !elements) return;
@@ -89,6 +99,7 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
         setShowConfetti(true);
         onSuccess?.(values);
         form.reset();
+        setShowPaymentElement(false);
         setTimeout(() => setShowConfetti(false), 5000);
       }
     } catch (error) {
@@ -108,7 +119,10 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form 
+            onSubmit={showPaymentElement ? form.handleSubmit(onSubmit) : handleInitialSubmit} 
+            className="space-y-4"
+          >
             <FormField
               control={form.control}
               name="name"
@@ -157,14 +171,16 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
               )}
             />
 
-            <PaymentElement />
+            {showPaymentElement && <PaymentElement />}
 
             <Button 
               type="submit" 
-              disabled={loading || !stripe || !elements} 
+              disabled={loading || (showPaymentElement && (!stripe || !elements))} 
               className="w-full"
             >
-              {loading ? "Processing..." : `Pay $${form.watch("amount") || 1}`}
+              {loading ? "Processing..." : 
+               showPaymentElement ? `Complete Payment for $${form.watch("amount") || 1}` :
+               `Pay $${form.watch("amount") || 1}`}
             </Button>
           </form>
         </Form>
@@ -174,16 +190,15 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
   );
 }
 
-// Main Payment Form Component that handles clientSecret
+// Main PaymentForm component stays the same
 export function PaymentForm(props: PaymentFormProps) {
   const [clientSecret, setClientSecret] = useState<string>("");
 
   useEffect(() => {
-    // Create PaymentIntent as soon as the page loads
     fetch("/api/stripe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: 1 }), // Default amount
+      body: JSON.stringify({ amount: 1 }),
     })
       .then((res) => res.json())
       .then((data) => setClientSecret(data.clientSecret))
