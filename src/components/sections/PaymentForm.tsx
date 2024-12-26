@@ -1,61 +1,98 @@
-// src/components/PaymentForm.tsx
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import * as z from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
-import { Confetti } from '@/components/ui/confetti';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Form,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormControl,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Confetti } from "@/components/ui/confetti";
+import { supabase } from "@/lib/supabase";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+
+// Initialize Stripe
+const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST!);
 
 // Form validation schema
 const formSchema = z.object({
-  name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
-  message: z.string().min(1, { message: 'Message is required.' }),
-  amount: z.number().min(1, { message: 'Amount must be at least $1.' }).default(1),
+  name: z.string().min(2, {
+    message: "Unless you're Elon's kid, your name is probably longer than 1 character.",
+  }),
+  message: z.string().min(1, { message: "Don't be shy!" }),
+  amount: z.number().min(1, {
+    message: "Sorry, Stripe fees are too high to be less than a $1.",
+  }).default(1),
 });
+
+type FormData = z.infer<typeof formSchema>;
 
 interface PaymentFormProps {
   onSuccess?: (notification: { name: string; message: string; amount: number }) => void;
 }
 
-export function PaymentForm({ onSuccess }: PaymentFormProps) {
+// Inner Payment Form Component that uses Stripe hooks
+function CheckoutForm({ onSuccess }: PaymentFormProps) {
   const [loading, setLoading] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const stripe = useStripe();
+  const elements = useElements();
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       amount: 1,
     },
   });
 
-  const onSubmit = async (values: z.infer<typeof formSchema>) => {
+  const onSubmit = async (values: FormData) => {
+    if (!stripe || !elements) return;
+
+    setLoading(true);
     try {
-      setLoading(true);
-      
-      // TODO: Add Stripe payment integration here
-      
-      // Save to Supabase
-      const { error } = await supabase
-        .from('1kby2025_payments')
-        .insert([values]);
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+      });
 
-      if (error) throw error;
+      if (result.error) {
+        throw result.error;
+      }
 
-      // Show success effects
-      setShowConfetti(true);
-      onSuccess?.(values);
-      form.reset();
+      if (result.paymentIntent?.status === "succeeded") {
+        const { error: supabaseError } = await supabase
+          .from("1kby2025_payments")
+          .insert([values]);
 
-      setTimeout(() => setShowConfetti(false), 5000);
+        if (supabaseError) throw supabaseError;
+
+        setShowConfetti(true);
+        onSuccess?.(values);
+        form.reset();
+        setTimeout(() => setShowConfetti(false), 5000);
+      }
     } catch (error) {
-      console.error('Payment error:', error);
-      // TODO: Add error handling
+      console.error("Payment error:", error);
     } finally {
       setLoading(false);
     }
@@ -66,7 +103,7 @@ export function PaymentForm({ onSuccess }: PaymentFormProps) {
       <CardHeader>
         <CardTitle>1/1000</CardTitle>
         <CardDescription>
-          Write a message for the board and see your dollar become 1/1000. Nothing else.
+          Write a message for the board and see your dollar become 1/1000.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -85,6 +122,7 @@ export function PaymentForm({ onSuccess }: PaymentFormProps) {
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="message"
@@ -98,6 +136,7 @@ export function PaymentForm({ onSuccess }: PaymentFormProps) {
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
               name="amount"
@@ -117,13 +156,56 @@ export function PaymentForm({ onSuccess }: PaymentFormProps) {
                 </FormItem>
               )}
             />
-            <Button type="submit" disabled={loading} className="w-full">
-              Pay ${form.watch('amount')}
+
+            <PaymentElement />
+
+            <Button 
+              type="submit" 
+              disabled={loading || !stripe || !elements} 
+              className="w-full"
+            >
+              {loading ? "Processing..." : `Pay $${form.watch("amount") || 1}`}
             </Button>
           </form>
         </Form>
       </CardContent>
       {showConfetti && <Confetti />}
     </Card>
+  );
+}
+
+// Main Payment Form Component that handles clientSecret
+export function PaymentForm(props: PaymentFormProps) {
+  const [clientSecret, setClientSecret] = useState<string>("");
+
+  useEffect(() => {
+    // Create PaymentIntent as soon as the page loads
+    fetch("/api/stripe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: 1 }), // Default amount
+    })
+      .then((res) => res.json())
+      .then((data) => setClientSecret(data.clientSecret))
+      .catch((error) => console.error("Error:", error));
+  }, []);
+
+  const appearance = {
+    theme: 'stripe' as const,
+  };
+
+  const options = {
+    clientSecret,
+    appearance,
+  };
+
+  return (
+    <>
+      {clientSecret && (
+        <Elements stripe={stripePromise} options={options}>
+          <CheckoutForm {...props} />
+        </Elements>
+      )}
+    </>
   );
 }
