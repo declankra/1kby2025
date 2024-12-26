@@ -31,6 +31,7 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import confetti from "canvas-confetti";
 
 // Initialize Stripe
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY_TEST!);
@@ -76,6 +77,81 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
     }
   };
 
+  const resetForm = () => {
+    form.reset({
+      name: '',
+      message: '',
+      amount: 1
+    });
+    setShowPaymentElement(false);
+  };
+
+  const triggerConfettiEffect = () => {
+    // Create money emoji shape
+    const scalar = 2;
+    const moneyEmoji = confetti.shapeFromText({ text: "🤑", scalar });
+
+    // Emoji burst config
+    const emojiDefaults = {
+      spread: 360,
+      ticks: 60,
+      gravity: 0,
+      decay: 0.96,
+      startVelocity: 20,
+      shapes: [moneyEmoji],
+      scalar,
+      colors: ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"],
+    };
+
+    // Side cannon animation
+    const end = Date.now() + 5 * 1000; // 5 seconds duration
+
+    const shootEmoji = () => {
+      confetti({
+        ...emojiDefaults,
+        particleCount: 15,
+      });
+
+      confetti({
+        ...emojiDefaults,
+        particleCount: 5,
+        shapes: ["circle"],
+      });
+    };
+
+    const shootSideCannons = () => {
+      if (Date.now() > end) return;
+
+      // Left cannon
+      confetti({
+        particleCount: 2,
+        angle: 60,
+        spread: 55,
+        startVelocity: 60,
+        origin: { x: 0, y: 0.5 },
+        colors: ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"],
+      });
+
+      // Right cannon
+      confetti({
+        particleCount: 2,
+        angle: 120,
+        spread: 55,
+        startVelocity: 60,
+        origin: { x: 1, y: 0.5 },
+        colors: ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"],
+      });
+
+      requestAnimationFrame(shootSideCannons);
+    };
+
+    // Trigger both effects
+    shootSideCannons();
+    setTimeout(shootEmoji, 0);
+    setTimeout(shootEmoji, 200);
+    setTimeout(shootEmoji, 400);
+  };
+
   const onSubmit = async (values: FormData) => {
     if (!stripe || !elements) return;
 
@@ -98,9 +174,9 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
         if (supabaseError) throw supabaseError;
 
         setShowConfetti(true);
+        triggerConfettiEffect();
         onSuccess?.(values);
-        form.reset();
-        setShowPaymentElement(false);
+        resetForm();
         setTimeout(() => setShowConfetti(false), 5000);
       }
     } catch (error) {
@@ -186,7 +262,6 @@ function CheckoutForm({ onSuccess }: PaymentFormProps) {
           </form>
         </Form>
       </CardContent>
-      {showConfetti && <Confetti />}
     </Card>
   );
 }
