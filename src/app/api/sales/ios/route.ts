@@ -54,6 +54,11 @@ export async function GET(request: NextRequest) {
       `filter[reportType]=SALES&` +
       `filter[vendorNumber]=${vendorNumber}&` +
       `filter[reportDate]=${formattedDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
     );
 
     // 4. Enhanced error handling
