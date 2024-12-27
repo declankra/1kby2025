@@ -1,73 +1,66 @@
-// apple-backfill.ts
 require("dotenv/config");
-const { supabase } = require("./src/lib/supabase");
+const supabase = require("./src/lib/supabase").supabase;
 const jwt = require("jsonwebtoken");
 const { gunzipSync } = require("zlib");
 const papaparse = require("papaparse");
 
-// Adjust table name if needed. This script expects a table named `apple_sales_history`:
-// create table public.apple_sales_history (
-//   id uuid default uuid_generate_v4() primary key,
-//   created_at timestamp with time zone default now(),
-//   report_date date not null,
-//   proceeds numeric(10,2) not null
-// );
-
 async function main() {
   console.log("Backfilling Apple sales data for August & December 2024...");
 
-  // 1. Generate all dates in August and December 2024
-  const augustDates = generateDateRange("2024-08-01", "2024-08-31");
-  const decemberDates = generateDateRange("2024-12-01", "2024-12-31");
-  const allDates = [...augustDates, ...decemberDates];
+  // We'll fetch 2 months, parse each CSV, and insert only the dates Apple provides.
+  const monthConfigs = [
+    { label: "August",   reportDate: "2024-08-01" },
+    { label: "December", reportDate: "2024-12-01" },
+  ];
 
-  // 2. Loop each date, fetch Apple CSV, sum proceeds, insert row in Supabase
-  for (const date of allDates) {
+  for (const { label, reportDate } of monthConfigs) {
+    console.log(`Fetching monthly CSV for ${label} 2024...`);
     try {
-      // First, check if that date already exists in the DB
-      const { data: existingRows, error: selectError } = await supabase
-        .from("apple_sales_history")
-        .select("*")
-        .eq("report_date", date);
+      const dailyProceedsMap = await fetchMonthlyAppleSales(reportDate);
 
-      if (selectError) {
-        console.error(`Supabase select error for date ${date}:`, selectError);
+      if (!dailyProceedsMap) {
+        console.warn(`${label} 2024 data is empty or invalid. Skipping...`);
         continue;
       }
 
-      if (existingRows && existingRows.length > 0) {
-        console.log(`Already have data for ${date}, skipping.`);
-        continue;
+      // Insert rows only for the days that appear in Apple’s CSV
+      for (const isoDate of Object.keys(dailyProceedsMap)) {
+        const proceeds = dailyProceedsMap[isoDate];
+
+        // Check if already exists
+        const { data: existingRows, error: selectError } = await supabase
+          .from("apple_sales_history")
+          .select("*")
+          .eq("report_date", isoDate);
+
+        if (selectError) {
+          console.error(`Select error for ${isoDate}:`, selectError);
+          continue;
+        }
+
+        if (existingRows && existingRows.length > 0) {
+          console.log(`Already have data for ${isoDate}, skipping.`);
+          continue;
+        }
+
+        console.log(`Inserting proceeds ${proceeds.toFixed(2)} for ${isoDate}...`);
+        const { error: insertError } = await supabase
+          .from("apple_sales_history")
+          .insert([
+            {
+              report_date: isoDate, 
+              proceeds, 
+            },
+          ]);
+
+        if (insertError) {
+          console.error(`Insert error for ${isoDate}:`, insertError);
+        } else {
+          console.log(`Inserted proceeds for ${isoDate}`);
+        }
       }
-
-      console.log(`Fetching sales for ${date}...`);
-      const totalProceeds = await fetchAppleSalesSum(date);
-
-      if (totalProceeds === null) {
-        // Means an error occurred or the Apple fetch failed
-        console.warn(`Could not fetch Apple data for ${date}`);
-        continue;
-      }
-
-      console.log(`  Summed proceeds: ${totalProceeds.toFixed(2)}`);
-
-      // Insert a single row with that date's proceeds
-      const { error: insertError } = await supabase
-        .from("apple_sales_history")
-        .insert([
-          {
-            report_date: date,
-            proceeds: totalProceeds,
-          },
-        ]);
-
-      if (insertError) {
-        console.error(`Supabase insert error for date ${date}:`, insertError);
-      } else {
-        console.log(`  Inserted proceeds for ${date}`);
-      }
-    } catch (error) {
-      console.error(`Error processing date ${date}:`, error);
+    } catch (err) {
+      console.error(`Unexpected error backfilling ${label} 2024:`, err);
     }
   }
 
@@ -75,25 +68,17 @@ async function main() {
   process.exit(0);
 }
 
-// Utility: create an array of date strings in YYYY-MM-DD format.
-function generateDateRange(start: string, end: string): string[] {
-  const dates: string[] = [];
-  let current = new Date(start);
-  const final = new Date(end);
-
-  while (current <= final) {
-    const yyyy = current.getFullYear();
-    const mm = String(current.getMonth() + 1).padStart(2, "0");
-    const dd = String(current.getDate()).padStart(2, "0");
-    dates.push(`${yyyy}-${mm}-${dd}`);
-    current.setDate(current.getDate() + 1);
-  }
-
-  return dates;
+// Convert Apple date string "08/01/2024" -> "2024-08-01"
+function convertAppleDateStringToISO(appleDateString: string) {
+  if (!appleDateString) return null;
+  const [mm, dd, yyyy] = appleDateString.split("/");
+  if (!mm || !dd || !yyyy) return null;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 
-// Fetch Apple CSV for one day, sum Developer Proceeds, return the total.
-async function fetchAppleSalesSum(reportDate: string): Promise<number | null> {
+// Downloads one monthly CSV from Apple (e.g., passing "2024-08-01" gets the August file),
+// parses it, and returns a dictionary keyed by day: { "2024-08-01": number, "2024-08-02": number, ... }
+async function fetchMonthlyAppleSales(reportDate: string): Promise<{ [date: string]: number } | null> {
   const keyId = process.env.APP_STORE_KEY_ID;
   const issuerId = process.env.APP_STORE_ISSUER_ID;
   const privateKey = process.env.APP_STORE_PRIVATE_KEY;
@@ -120,6 +105,9 @@ async function fetchAppleSalesSum(reportDate: string): Promise<number | null> {
     }
   );
 
+  // Apple usually returns the entire month of daily rows if we pass "YYYY-MM-01"
+  // But if the CSV lumps all days into the same Begin/End Date, Apple is giving you
+  // a single monthly total with the same date. We'll still parse it just in case.
   const url =
     `https://api.appstoreconnect.apple.com/v1/salesReports?` +
     `filter[frequency]=DAILY&` +
@@ -136,7 +124,7 @@ async function fetchAppleSalesSum(reportDate: string): Promise<number | null> {
 
   if (!response.ok) {
     const errText = await response.text();
-    console.error(`Apple API Error for date ${reportDate}:`, errText);
+    console.error(`Apple API error for date ${reportDate}:`, errText);
     return null;
   }
 
@@ -147,17 +135,34 @@ async function fetchAppleSalesSum(reportDate: string): Promise<number | null> {
 
   // Parse CSV
   const { data } = papaparse.parse(csvString, { header: true, skipEmptyLines: true });
-  let totalProceeds = 0;
+  if (!data || !Array.isArray(data)) {
+    console.warn("CSV parse returned empty or invalid data.");
+    return null;
+  }
+
+  // Accumulate daily sums
+  const dailyProceeds: { [date: string]: number } = {};
 
   data.forEach((row: any) => {
+    const isoDate = convertAppleDateStringToISO(row["Begin Date"]); 
+    // or try row["End Date"] if Apple lumps all data in a single row
+    if (!isoDate) return;
+
     const proceedsStr = row["Developer Proceeds"] || "0";
     const numericProceeds = parseFloat(proceedsStr);
+
+    // Debug log
+    console.log(
+      `Row => Begin Date: ${row["Begin Date"]} | Developer Proceeds: ${row["Developer Proceeds"]}`
+    );
+    console.log(`Converted => isoDate: ${isoDate}, proceedsStr: ${proceedsStr}`);
+
     if (!isNaN(numericProceeds)) {
-      totalProceeds += numericProceeds;
+      dailyProceeds[isoDate] = (dailyProceeds[isoDate] || 0) + numericProceeds;
     }
   });
 
-  return totalProceeds;
+  return dailyProceeds;
 }
 
 // Run the script
