@@ -1,3 +1,4 @@
+// src/components/sections/DonutChart.tsx
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -12,23 +13,20 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
-// Product configuration
-const PRODUCTS = [
+// Revenue source configuration
+const SOURCES = [
   { 
-    id: 'rtc',
-    name: 'Race Time Calculator',
+    id: 'ios',
+    name: 'iOS Apps',
     color: 'hsl(var(--chart-1))',
-    link: 'https://apps.apple.com/app/race-time-calculator/id6478423515'
   },
   { 
-    id: '1kby2025',
-    name: '1000by2025.quest',
+    id: 'web',
+    name: 'Web Apps',
     color: 'hsl(var(--chart-2))',
-    link: 'https://1000by2025.quest'
   }
 ];
 
-// Custom tooltip component (simplified)
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -57,30 +55,30 @@ export default function DonutChart() {
       
       try {
         // Fetch data from both revenue sources
-        const [iosResponse, stripeResponse] = await Promise.all([
+        const [iosResponse, webResponse] = await Promise.all([
           fetch('/api/sales/ios'),
           fetch('/api/sales/stripe')
         ]);
 
-        if (!iosResponse.ok || !stripeResponse.ok) {
+        if (!iosResponse.ok || !webResponse.ok) {
           throw new Error('Failed to fetch revenue data');
         }
 
         const iosData = await iosResponse.json();
-        const stripeData = await stripeResponse.json();
+        const webData = await webResponse.json();
 
-        // Calculate total revenue for each product
-        const rtcRevenue = iosData.reduce((sum: number, day: any) => sum + day.amount, 0);
-        const questRevenue = stripeData.reduce((sum: number, day: any) => sum + day.amount, 0);
+        // Calculate total revenue for each source
+        const iosTotal = iosData.reduce((sum: number, day: any) => sum + day.amount, 0);
+        const webTotal = webData.reduce((sum: number, day: any) => sum + day.amount, 0);
 
         // Format data for the pie chart
         const chartData = [
-          { ...PRODUCTS[0], value: rtcRevenue },
-          { ...PRODUCTS[1], value: questRevenue }
+          { ...SOURCES[0], value: iosTotal },
+          { ...SOURCES[1], value: webTotal }
         ];
 
         setData(chartData);
-        setTotalRevenue(rtcRevenue + questRevenue);
+        setTotalRevenue(iosTotal + webTotal);
       } catch (err) {
         console.error('Error fetching revenue data:', err);
         setError('Failed to load revenue data. Please try again later.');
@@ -104,28 +102,25 @@ export default function DonutChart() {
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Revenue by Product</CardTitle>
-        <CardDescription>All time revenue by product</CardDescription>
+        <CardTitle>Revenue by Source</CardTitle>
+        <CardDescription>Distribution between iOS and Web application revenue</CardDescription>
       </CardHeader>
       <CardContent>
         {/* Legend */}
         <div className="mb-6 flex justify-center gap-6">
-          {data.map((entry) => (
-            <a
-              key={entry.id}
-              href={entry.link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="group flex items-center gap-2 transition-colors hover:text-primary"
+          {SOURCES.map((source) => (
+            <div
+              key={source.id}
+              className="flex items-center gap-2"
             >
               <div 
                 className="h-3 w-3 rounded-sm" 
-                style={{ backgroundColor: entry.color }} 
+                style={{ backgroundColor: source.color }} 
               />
               <span className="text-sm font-medium">
-                {entry.name}
+                {source.name}
               </span>
-            </a>
+            </div>
           ))}
         </div>
         
@@ -142,7 +137,7 @@ export default function DonutChart() {
                   ${totalRevenue.toFixed(2)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Revenue
+                  Total Revenue
                 </p>
               </div>
               

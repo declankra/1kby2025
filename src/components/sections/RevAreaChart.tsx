@@ -30,8 +30,8 @@ import { AlertCircle } from "lucide-react";
 // Type definitions
 interface RevenueData {
   date: string;
-  'Race Time Calculator': number;
-  '1000by2025.quest': number;
+  'IOS Apps': number;
+  'Web Apps': number;
 }
 
 interface Product {
@@ -43,8 +43,8 @@ const DEFAULT_START_DATE = '2024-02-02';
 
 // Constants
 const products: Product[] = [
-  { name: 'Race Time Calculator', color: 'hsl(var(--chart-1))' },
-  { name: '1000by2025.quest', color: 'hsl(var(--chart-2))' },
+  { name: 'IOS Apps', color: 'hsl(var(--chart-1))' },
+  { name: 'Web Apps', color: 'hsl(var(--chart-2))' },
 ];
 
 const timeRanges = [
@@ -138,8 +138,8 @@ export default function RevAreaChart() {
         // Combine the data with filled gaps
         const combinedData = dateRange.map(date => ({
           date,
-          'Race Time Calculator': iosData.find((d: any) => d.date === date)?.amount || 0,
-          '1000by2025.quest': stripeData.find((d: any) => d.date === date)?.amount || 0,
+          'IOS Apps': iosData.find((d: any) => d.date === date)?.amount || 0,
+          'Web Apps': stripeData.find((d: any) => d.date === date)?.amount || 0,
         }));
 
         // Sort by date

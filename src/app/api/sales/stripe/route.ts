@@ -1,4 +1,4 @@
-// app/api/sales/stripe/route.ts
+// src/app/api/sales/stripe/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
@@ -17,22 +17,26 @@ export async function GET(request: NextRequest) {
         lte: endDate,
       },
     };
+    
     const charges = await stripe.charges.list(params);
 
-    // Group charges by date
+    // Group charges by date and sum amounts
     const dailyRevenue = charges.data.reduce((acc: { [key: string]: number }, charge) => {
       const date = new Date(charge.created * 1000).toISOString().split('T')[0];
       acc[date] = (acc[date] || 0) + (charge.amount / 100); // Convert from cents to dollars
       return acc;
     }, {});
 
-    // Convert to array format for the chart
+    // Convert to array format matching iOS API
     const transformedData = Object.entries(dailyRevenue).map(([date, amount]) => ({
       date,
-      amount,
+      amount
     }));
 
-    return NextResponse.json(transformedData);
+    // Sort by date
+    return NextResponse.json(
+      transformedData.sort((a, b) => a.date.localeCompare(b.date))
+    );
   } catch (error) {
     console.error('Stripe API error:', error);
     return NextResponse.json(
