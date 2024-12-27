@@ -1,10 +1,13 @@
-// app/api/sales/ios/route.ts
-import { NextRequest, NextResponse } from "next/server";
-import jwt from 'jsonwebtoken';
+// src/app/api/sales/ios/route.ts
 
-// Mock data moved to separate constant for clarity
+import { NextRequest, NextResponse } from "next/server";
+import jwt from "jsonwebtoken";
+import { gunzipSync } from "zlib";
+import Papa from "papaparse";
+
+// Optional mock data for fallback
 const MOCK_DATA = [
-  { date: '2024-08-17', amount: 6.44181 },
+  { date: "2024-08-17", amount: 6.44181 },
   // ... other mock data ...
 ];
 
@@ -17,43 +20,44 @@ export async function GET(request: NextRequest) {
     const vendorNumber = process.env.APP_STORE_VENDOR_NUMBER;
 
     if (!keyId || !issuerId || !privateKey || !vendorNumber) {
-      console.warn('Missing App Store credentials - falling back to mock data');
+      console.warn("Missing App Store credentials - falling back to mock data");
       return NextResponse.json(MOCK_DATA);
     }
 
-    // 2. Generate JWT token
+    // 2. Generate JWT for Apple’s API
     const now = Math.floor(Date.now() / 1000);
-    const token = jwt.sign({
-      iss: issuerId,
-      iat: now,
-      exp: now + (20 * 60), // 20 minutes maximum
-      aud: 'appstoreconnect-v1',
-    }, privateKey, {
-      algorithm: 'ES256',
-      header: {
-        alg: 'ES256',
-        kid: keyId,
-        typ: 'JWT'
+    const token = jwt.sign(
+      {
+        iss: issuerId,
+        iat: now,
+        exp: now + 20 * 60, // 20 minutes
+        aud: "appstoreconnect-v1",
+      },
+      privateKey,
+      {
+        algorithm: "ES256",
+        header: {
+          alg: "ES256",
+          kid: keyId,
+          typ: "JWT",
+        },
       }
-    });
+    );
 
-
-    // Calculate two days ago date for the query becuase reports are slow to generate
+    // 3. Determine the report date (2 days ago to ensure availability)
     const today = new Date();
-    // Go back 2 days to ensure report availability across all time zones
     const reportDate = new Date(today);
     reportDate.setDate(today.getDate() - 2);
-    // Format as YYYY-MM-DD
-    const formattedDate = reportDate.toISOString().split('T')[0];
+    const formattedDate = reportDate.toISOString().split("T")[0];
 
-    // 3. Make API request
+    // 4. Fetch gzipped CSV file
     const response = await fetch(
       `https://api.appstoreconnect.apple.com/v1/salesReports?` +
-      `filter[frequency]=DAILY&` +
-      `filter[reportSubType]=SUMMARY&` +
-      `filter[reportType]=SALES&` +
-      `filter[vendorNumber]=${vendorNumber}&` +
-      `filter[reportDate]=${formattedDate}`,
+        `filter[frequency]=DAILY&` +
+        `filter[reportSubType]=SUMMARY&` +
+        `filter[reportType]=SALES&` +
+        `filter[vendorNumber]=${vendorNumber}&` +
+        `filter[reportDate]=${formattedDate}`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -61,55 +65,68 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // 4. Enhanced error handling
+    // Check if response is OK, otherwise log and return mock
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('App Store API Error:', {
+      console.error("App Store API Error:", {
         status: response.status,
         statusText: response.statusText,
-        requestDate: formattedDate, // Log the requested date for debugging
-        body: errorText
+        requestDate: formattedDate,
+        body: errorText,
       });
-
-      // Fall back to mock data on API failure
-      console.warn('API request failed - falling back to mock data');
+      console.warn("API request failed - falling back to mock data");
       return NextResponse.json(MOCK_DATA);
     }
 
-    // 5. Transform and validate data
-    const rawData = await response.json();
-    const transformedData = transformAppStoreData(rawData);
+    // 5. Decompress the gzip data
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const decompressed = gunzipSync(buffer);
 
-    // Validate transformed data
-    if (!transformedData || transformedData.length === 0) {
-      console.warn('No valid data returned from API - falling back to mock data');
+    // 6. Convert CSV buffer into text
+    const csvString = decompressed.toString("utf-8");
+
+    // Debug 1: Show the length and snippet of CSV
+    console.log("CSV length:", csvString.length);
+    console.log("CSV snippet:\n", csvString.slice(0, 500));
+
+    // 7. Parse CSV to JSON
+    const { data, errors, meta } = Papa.parse(csvString, {
+      header: true,
+      skipEmptyLines: true,
+    });
+
+    // Debug 2: Show any Papa parse errors and metadata
+    if (errors.length) {
+      console.error("Papaparse errors:", errors);
+    }
+    console.log("Papa parse meta:", meta);
+    console.log("Parsed row count:", data.length);
+
+    // Debug 3: Log a sample of the parsed rows
+    console.log("First parsed row:", data[0]);
+
+    // 8. Transform parsed data to { date, amount } or your desired fields
+    const transformedData = data
+      .map((row: any) => ({
+        date: row.BeginDate || row.EndDate || formattedDate,
+        amount: parseFloat(row.Proceeds || "0"),
+      }))
+      .filter((item: any) => !isNaN(item.amount));
+
+    // Debug 4: Log sample of transformed data
+    console.log("Transformed data sample:", transformedData.slice(0, 3));
+
+    // 9. If no valid data, fall back
+    if (!transformedData.length) {
+      console.warn("No valid data returned - using mock data");
       return NextResponse.json(MOCK_DATA);
     }
 
+    // 10. Return final data as JSON
     return NextResponse.json(transformedData);
-
   } catch (error) {
-    console.error('App Store API error:', error);
-    // Always fall back to mock data on any error
+    console.error("App Store API error:", error);
     return NextResponse.json(MOCK_DATA);
-  }
-}
-
-function transformAppStoreData(data: any) {
-  try {
-    // Add validation for data structure
-    if (!Array.isArray(data)) {
-      console.warn('Invalid data structure received from API');
-      return null;
-    }
-
-    return data.map((item: any) => ({
-      date: item.date || new Date().toISOString().split('T')[0],
-      amount: parseFloat(item.proceeds || '0')
-    })).filter(item => !isNaN(item.amount));
-
-  } catch (error) {
-    console.error('Error transforming App Store data:', error);
-    return null;
   }
 }
