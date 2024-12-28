@@ -5,7 +5,7 @@ import RevenueChart from '@/components/sections/RevAreaChart';
 import DonutChart from '@/components/sections/DonutChart';
 import Hero from '@/components/sections/Hero';
 import About from '@/components/sections/About';
-
+import { ProductsList } from '@/components/sections/ProductsList';
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
@@ -19,6 +19,9 @@ export default function Home() {
           <div className="grid gap-8 md:grid-cols-2">
             <DonutChart />
             <RevenueChart />
+          </div>
+          <div className="mt-12">
+            <ProductsList />
           </div>
         </div>
       </section>
