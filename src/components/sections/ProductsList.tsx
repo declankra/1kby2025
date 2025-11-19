@@ -26,9 +26,9 @@ const PRODUCTS: Product[] = [
     type: "ios",
   },
   {
-    name: "1000by2025.quest",
+    name: "1kby2025.vercel.app",
     description: "Track progress towards revenue goal and POC for web app Stripe payments",
-    link: "https://1000by2025.quest",
+    link: "https://1kby2025.vercel.app",
     type: "web",
   },
   {
